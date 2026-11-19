@@ -128,6 +128,58 @@ The attribute `user_preset` on the climate entity shows your choice at any time.
   sensor there is nothing to wait for, and a boost heats right away.
 - A boost does not survive a Home Assistant restart. Your own choice comes back.
 
+### Automatic boost
+
+**Off by default.** Switch it on under **Settings → Devices & Services → Tado X
+Proxy → Configure → Automatic boost**.
+
+The room then starts a boost by itself while it is clearly below its target, and ends
+it once the room has caught up. This helps a room that has to warm up a lot, for
+example when a schedule switches from Eco to Comfort in the morning. How much it helps
+depends on the water behind the radiator: a boost asks the valve to open wide, but a
+radiator with lukewarm water has little more heat to give.
+
+- **It starts** once the room is at least the **Start at** value (default 1.0 °C)
+  below the target of your own choice.
+- **It ends** once the room is no more than the **End at** value (default 0 °C, that
+  is: at the target) below that target. Your own choice is back, as after any boost.
+- **It only heats towards Comfort or a Manual temperature.** With Eco, Away or Frost
+  Protection as your choice, it never starts: those are picked to save energy.
+- **It runs at most the boost duration** (default 30 minutes), like a boost you start
+  yourself. It heats at the boost temperature.
+- **It never pauses.** A boost you start yourself pauses behind an open window, nobody
+  home or heating that is off. An automatic boost ends instead. It does not come back
+  afterwards; a new one starts only after the lockout below, if the room is still cold.
+- **Anything you do ends it:** picking a preset, setting a temperature, turning the
+  dial on the radiator (with [following the physical thermostat](#following-the-physical-thermostat)
+  on) or turning the heating off. Picking Boost turns it into a boost of your own with
+  its full time.
+- **It only trusts your room sensor.** It does not start while
+  `binary_sensor.<name>_sensor_degraded` is on, and it ends if the sensor drops out.
+  It does not start while a window is open or its close delay runs, or while the
+  away delay runs.
+- **It waits for the min command interval** like every other increase. Only a boost
+  you start yourself is sent right away (see [Boost](#boost)).
+- **A lockout after every boost.** After any boost has ended, automatic or your own,
+  no automatic boost starts for the **Lockout after a boost** time (default 120
+  minutes). This keeps a radiator that cannot reach the target – for example while
+  the boiler water is cool – from boosting again and again. The lockout survives a
+  Home Assistant restart. A running boost does not.
+
+| Setting | Default | Range | What it does |
+|---|---|---|---|
+| Automatic boost | Off | On/Off | Master switch for this section |
+| Start at | 1.0 °C | 0.3–3.0 °C | A boost starts once the room is at least this much below its target |
+| End at | 0.0 °C | 0.0–2.0 °C | The boost ends once the room is no more than this much below its target. Must be lower than **Start at** |
+| Lockout after a boost | 120 min | 0–1440 min | No automatic boost for this long after a boost has ended. 0 means no lockout |
+
+How long it may run is the **Boost duration** at the top of the dialog. Changes
+apply right away and do not interrupt a running boost. Switching it off ends a
+running automatic boost.
+
+The attribute `auto_boost_active` on the climate entity tells an automatic boost from
+one you started. `sensor.<name>_boost_remaining` counts down for both.
+
 ---
 
 ## Entities you get
@@ -584,6 +636,8 @@ something is wrong or when you are curious what the integration is thinking.
 | `window_trv_off` | The window action switched the TRV off, and it has not heated since. True while the window holds the room, including the close delay; gone once the TRV is switched on again |
 | `presence_away_active` | Nobody home holds the room. Also while the heating is off |
 | `guest_mode` | Guest mode is on, presence detection will not switch to Away |
+| `auto_boost_active` | The running boost was started by the [automatic boost](#automatic-boost). Only while the automatic boost is switched on |
+| `auto_boost_lockout_until_ts` | Until when no automatic boost starts, as a Unix timestamp. Only while that lockout runs |
 | `sensor_degraded` | Room sensor missing, running on the last reading |
 | `active_control_mode` | What controls the TRV right now: `room_sensor`, `backup_sensor`, `trv` or `hold`. See [when the sensor drops out](#when-the-sensor-drops-out) |
 | `overlay_refresh_s` | The configured overlay refresh interval. 0 means off |

@@ -36,6 +36,14 @@ _Avoid_: overlay, override, automation state
 The layer a person starts for a short burst of heat. Its time only runs while the boost is what heats the room – an open window, nobody home or heating that is off pause it.
 _Avoid_: boost mode, boost preset
 
+**Automatic boost**:
+A boost the room starts by itself while it is clearly below the target of the user choice (Comfort or Manual), and ends once the room has caught up. Unlike a person's boost it never pauses: whatever would pause a boost ends it. A person picking Boost turns it into their own.
+_Avoid_: auto mode, smart boost
+
+**Boost lockout**:
+The time after any boost has ended during which no automatic boost starts, so a radiator that cannot reach the target does not boost in a loop.
+_Avoid_: cooldown
+
 **Close delay**:
 The wait after a window closes before the window's layer lets go of the room.
 _Avoid_: restore delay

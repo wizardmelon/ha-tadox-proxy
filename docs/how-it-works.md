@@ -309,7 +309,8 @@ Two refinements soften the edges:
   this way: a boost that follows it within the interval waits. So tapping Boost and
   another preset in turns does not send a command with every tap. A boost that had
   nothing to wait for is not counted. A boost that a schedule or an automation
-  starts waits like every other increase, and so does a boost that comes back after
+  starts waits like every other increase, and so do the
+  [automatic boost](settings.md#automatic-boost) and a boost that comes back after
   an open window or after nobody was home. Tools that connect with an access token
   count as a person (see [Boost](settings.md#boost)).
 
@@ -418,6 +419,8 @@ to; every overlap of two automations (a boost under a window, a change while nob
 is home, a restart in between) needed its own rule, and each one was a bug waiting to
 happen. A boost fits the same model: it only counts down while it is the active
 layer, so a window or heating that is off pauses it instead of eating it up. The
+automatic boost is the same layer, started by the room itself; it ends where a
+person's boost would pause, since nobody asked for it to come back later. The
 decision and the rejected alternative are recorded in
 [ADR 0001](adr/0001-presets-as-user-choice-plus-layers.md).
 
@@ -442,7 +445,7 @@ Assistant dependencies so it can be read and tested on its own:
 |---|---|
 | `custom_components/tadox_proxy/regulation.py` | The entire control loop, ~200 lines |
 | `custom_components/tadox_proxy/parameters.py` | Every default value, with rationale |
-| `custom_components/tadox_proxy/preset_layers.py` | Which preset the room runs: the user choice, the window, nobody-home and boost layers, their delays, restart and the window's "off" action |
+| `custom_components/tadox_proxy/preset_layers.py` | Which preset the room runs: the user choice, the window, nobody-home and boost layers, their delays, the automatic boost and its lockout, restart and the window's "off" action |
 | `custom_components/tadox_proxy/climate_controllers.py` | Follow detection; sensor grace period and sensor-loss action; when a command is sent (rate limiting); preset targets; needs heat for a boiler (hysteresis on `error_c`) |
 | `tests/` | Test suite, runnable without Home Assistant |
 | `tests_ha/` | Integration tests against a real Home Assistant core (Linux/macOS) |

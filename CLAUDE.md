@@ -32,12 +32,12 @@ prüfen lässt, per AST-Guard absichern (siehe `tests/test_climate_hardening.py`
 
 ### Schlüsseldateien
 
-- `parameters.py` – Defaults (RegulationConfig, PresetConfig, CorrectionTuning, BehaviourConfig, Fenster-/Präsenz-/Overlay-Zeiten, Braucht-Wärme-Schwellen)
+- `parameters.py` – Defaults (RegulationConfig, PresetConfig, CorrectionTuning, BehaviourConfig, Fenster-/Präsenz-/Overlay-Zeiten, Braucht-Wärme-Schwellen, Auto-Boost-Schwellen und -Sperrzeit)
 - `regulation.py` – Feedforward + PI Engine (HA-unabhängig)
-- `preset_layers.py` – `PresetLayers`: welches Preset der Raum fährt. Einziger Besitzer von Nutzerwahl, Fenster-, Niemand-da- und Boost-Ebene, Gastmodus, Rohzuständen der Sensoren und Ventil-Zustand der Fenster-Aktion „aus“; Start nach Neustart inkl. Migration von v1.4.x. Ereignisse rein, `Effects` (Timer starten/stoppen, Regelzyklus, Zustand geändert) raus; plant selbst keine Timer; sagt dem Regelzyklus, ob er der Start eines Boosts durch eine Person ist (`is_boost_start`, Trigger `CYCLE_BOOST_STARTED`)
+- `preset_layers.py` – `PresetLayers`: welches Preset der Raum fährt. Einziger Besitzer von Nutzerwahl, Fenster-, Niemand-da- und Boost-Ebene, Gastmodus, Rohzuständen der Sensoren und Ventil-Zustand der Fenster-Aktion „aus“; Start nach Neustart inkl. Migration von v1.4.x. Ereignisse rein, `Effects` (Timer starten/stoppen, Regelzyklus, Zustand geändert) raus; plant selbst keine Timer; sagt dem Regelzyklus, ob er der Start eines Boosts durch eine Person ist (`is_boost_start`, Trigger `CYCLE_BOOST_STARTED`); entscheidet über den automatischen Boost (`room_reported`: Start/Ende am Abstand zum Ziel der Nutzerwahl, endet statt zu pausieren, Sperrzeit nach jedem Boost)
 - `climate_controllers.py` – HA-unabhängige Entscheidungslogik: Follow-Tado-Erkennung, Sensor-Grace + Sensorausfall-Aktion (`ControlModeResolver`), Sende-/Rate-Limit-Entscheidung (`decide_send`; einzige Ausnahme nach oben: `urgent_increase`, höchstens eine je Sende-Intervall über `last_urgent_increase_ts`), Preset→Ziel (`preset_target_c`), tolerantes Zahlen-Parsing (`safe_float`), Braucht-Wärme-Entscheidung für den Kessel (`NeedsHeat`, Hysterese auf `error_c`)
 - `climate.py` – HA ClimateEntity: Properties, Lifecycle (Start-Snapshot für PresetLayers), Config, Follow-Tado; stellt Einheit, Raum- und Zieltemperatur unter den Namen bereit, die die laufende HA-Version liest (Schalter `_NATIVE_TEMPERATURE_NAMES`: ab 2026.11 `native_*`, davor die alten) – der ältere Zweig fällt weg, sobald das Minimum 2026.11 ist
-- `climate_regulation.py` – RegulationMixin: Regelzyklus, TRV-Kommandos, Rückmeldung der Fenster-Aktion an PresetLayers; lässt `NeedsHeat` vor jedem Schreiben der Sub-Entities entscheiden (`_write_linked_entities`)
+- `climate_regulation.py` – RegulationMixin: Regelzyklus, TRV-Kommandos, Rückmeldung der Fenster-Aktion an PresetLayers; meldet PresetLayers je Zyklus die vertrauenswürdige Raumtemperatur für den automatischen Boost (`_report_room_to_layers`, vor dem Sollwert); lässt `NeedsHeat` vor jedem Schreiben der Sub-Entities entscheiden (`_write_linked_entities`)
 - `climate_presets.py` – PresetMixin: Adapter zu PresetLayers – leitet Sensor-/Service-Ereignisse weiter, Timer-Registry (id → cancel), wendet `Effects` an
 - `device.py` – `proxy_device_info()`: vollständige DeviceInfo für **alle** Entities (sonst fehlt der Gerätename im Entity-ID-Präfix)
 - `number.py` – NumberEntity für Preset-Temperaturen
@@ -156,6 +156,6 @@ Lies `.claude/docs/brand-assets.md` bevor du an Logos/Icons arbeitest.
   solcher Boost am Limit vorbei (Grund `urgent_increase`); ein Boost, der
   keine Ausnahme brauchte (kein Befehl im Intervall davor, Grund
   `normal_update`), zählt nicht mit. Ein Boost, der erst später anläuft
-  (Fenster offen, niemand da, Heizung aus), wartet wie jede andere Erhöhung.
-  Diese Ausnahme nicht auf andere Erhöhungen, Automationen oder Zeitpläne
-  ausweiten.
+  (Fenster offen, niemand da, Heizung aus), wartet wie jede andere Erhöhung,
+  ebenso der automatische Boost. Diese Ausnahme nicht auf andere Erhöhungen,
+  Automationen oder Zeitpläne ausweiten.

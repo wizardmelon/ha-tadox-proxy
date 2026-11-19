@@ -115,7 +115,8 @@ Beyond the temperature correction, you get:
 - **Presets** — Comfort, Eco, Away, Boost, Frost Protection. One tap each. What you
   picked comes back by itself: after airing, after coming home and after a boost.
   Even after a restart. If you set a temperature by hand, the room can go back to
-  your preset after a time you choose. Optional.
+  your preset after a time you choose. Optional. A boost can also start by itself
+  when the room is much too cold, and stop once it is warm. Optional.
 - **Window detection** — when a window contact opens, heating drops to frost
   protection, or switches off if you prefer. Optional.
 - **Presence detection** — when nobody is home, the room drops to Away and recovers
