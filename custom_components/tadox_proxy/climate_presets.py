@@ -20,6 +20,10 @@ from .climate_controllers import (
     safe_float,
 )
 from .const import (
+    CONF_AUTO_BOOST_ENABLED,
+    CONF_AUTO_BOOST_LOCKOUT_MIN,
+    CONF_AUTO_BOOST_START_C,
+    CONF_AUTO_BOOST_STOP_C,
     CONF_COMFORT_TARGET,
     CONF_MANUAL_MODE_ACTION,
     CONF_MANUAL_MODE_DURATION_MIN,
@@ -32,6 +36,10 @@ from .const import (
     CONF_WINDOW_SENSOR_ID,
 )
 from .parameters import (
+    DEFAULT_AUTO_BOOST_ENABLED,
+    DEFAULT_AUTO_BOOST_LOCKOUT_MIN,
+    DEFAULT_AUTO_BOOST_START_C,
+    DEFAULT_AUTO_BOOST_STOP_C,
     DEFAULT_MANUAL_MODE_DURATION_MIN,
     DEFAULT_PRESENCE_AWAY_DELAY_S,
     DEFAULT_PRESENCE_HOME_DELAY_S,
@@ -122,6 +130,12 @@ class PresetMixin:
             manual_mode_action=opts.get(CONF_MANUAL_MODE_ACTION, DEFAULT_MANUAL_MODE_ACTION),
             manual_mode_duration_min=opts.get(
                 CONF_MANUAL_MODE_DURATION_MIN, DEFAULT_MANUAL_MODE_DURATION_MIN
+            ),
+            auto_boost_enabled=opts.get(CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED),
+            auto_boost_start_c=opts.get(CONF_AUTO_BOOST_START_C, DEFAULT_AUTO_BOOST_START_C),
+            auto_boost_stop_c=opts.get(CONF_AUTO_BOOST_STOP_C, DEFAULT_AUTO_BOOST_STOP_C),
+            auto_boost_lockout_min=opts.get(
+                CONF_AUTO_BOOST_LOCKOUT_MIN, DEFAULT_AUTO_BOOST_LOCKOUT_MIN
             ),
         )
 

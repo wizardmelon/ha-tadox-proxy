@@ -9,7 +9,13 @@ import time
 from homeassistant.components.climate import HVACMode
 from homeassistant.exceptions import HomeAssistantError
 
-from .climate_controllers import CONTROL_TRV, decide_send, trv_drifted_setpoint
+from .climate_controllers import (
+    CONTROL_ROOM_SENSOR,
+    CONTROL_TRV,
+    ControlDecision,
+    decide_send,
+    trv_drifted_setpoint,
+)
 from .const import PRESET_FROST_PROTECTION
 from .regulation import RegulationState
 
@@ -135,6 +141,10 @@ class RegulationMixin:
             self._reg_state = RegulationState()
             self._last_regulation_ts = 0.0
 
+        # Before the setpoint: an automatic boost that starts or ends now
+        # already counts for this cycle.
+        self._report_room_to_layers(decision, now)
+
         # 2. Effective setpoint (considers HVAC mode + preset)
         setpoint = self._effective_setpoint()
 
@@ -218,6 +228,25 @@ class RegulationMixin:
             self._last_reason = reason
 
         self._write_state_with_linked_entities()
+
+    def _report_room_to_layers(self, decision: ControlDecision, now: float) -> None:
+        """Let PresetLayers start or end an automatic boost on this cycle's reading.
+
+        Only the room sensor's own fresh reading counts: a bridged last
+        reading, the backup sensor or the TRV in charge report none, which
+        ends an automatic boost.  A boost started here waits for the send
+        limit like every other increase – only a person's boost may skip it.
+        """
+        trusted = decision.mode == CONTROL_ROOM_SENSOR and not self._control.degraded
+        room_c = decision.room_temp_c if trusted else None
+        was_active = self._layers.auto_boost_active
+        self._apply_layer_effects(self._layers.room_reported(room_c, now))
+        if self._layers.auto_boost_active != was_active:
+            _LOGGER.info(
+                "Automatic boost %s (room: %s)",
+                "ended" if was_active else "started",
+                "no trusted reading" if room_c is None else f"{room_c:.1f}°C",
+            )
 
     async def _async_switch_trv_for_window(self) -> bool:
         """Switch the TRV off for an open window, or on again once it closed.

@@ -96,6 +96,22 @@
               "needs_heat_off_c": "Senzor vypne, jakmile teplota v místnosti není o více než tuto hodnotu pod cílem. Hodnota 0 znamená přesné dosažení cílové teploty. Musí být nižší než hodnota pro sepnutí."
             }
           },
+          "auto_boost": {
+            "name": "Automatický boost",
+            "description": "Sám spustí boost, dokud je teplota v místnosti výrazně pod cílem předvolby Komfort nebo vaší ruční teploty, a ukončí jej, jakmile místnost cíl dožene. Trvá nejvýše po dobu boostu. Ukončí jej otevřené okno, nepřítomnost, vypnutí topení nebo jakákoli vaše změna.",
+            "data": {
+              "auto_boost_enabled": "Automatický boost",
+              "auto_boost_start_c": "Spustit při odchylce od",
+              "auto_boost_stop_c": "Ukončit při odchylce do",
+              "auto_boost_lockout_min": "Blokování po boostu"
+            },
+            "data_description": {
+              "auto_boost_enabled": "Ve výchozím stavu vypnuto.",
+              "auto_boost_start_c": "Boost se spustí, jakmile je teplota v místnosti alespoň o tuto hodnotu pod cílem.",
+              "auto_boost_stop_c": "Boost skončí, jakmile teplota v místnosti není o více než tuto hodnotu pod cílem. Hodnota 0 znamená přesné dosažení cílové teploty. Musí být nižší než hodnota pro spuštění.",
+              "auto_boost_lockout_min": "Po skončení boostu se po tuto dobu žádný automatický boost nespustí. Radiátor, který cíle nedosáhne, tak neboostuje stále dokola. 0 = bez blokování."
+            }
+          },
           "pi_controller": {
             "name": "PI regulátor",
             "description": "Parametry ladění proporcionálně-integračního regulátoru.",
@@ -166,6 +182,7 @@
       "backup_sensor_same": "Záložní senzor místnosti se musí lišit od externího teplotního senzoru.",
       "gain_thresholds": "Adaptivní řízení zesílení: prahová hodnota zóny poblíž cíle musí být nižší než prahová hodnota zóny studeného startu.",
       "needs_heat_thresholds": "Senzor požadavku na teplo: hodnota pro vypnutí musí být nižší než hodnota pro sepnutí.",
+      "auto_boost_thresholds": "Automatický boost: hodnota pro ukončení musí být nižší než hodnota pro spuštění.",
       "temp_entity_not_found": "Externí teplotní senzor nebyl nalezen.",
       "temp_not_temperature": "Vyberte prosím teplotní senzor (device_class: temperature)."
     }

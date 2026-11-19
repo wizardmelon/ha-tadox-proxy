@@ -62,6 +62,7 @@ OPTIONS_SECTIONS = (
     "window_sensor",
     "presence_sensor",
     "needs_heat",
+    "auto_boost",
     "manual_mode",
     "pi_controller",
     "gain_scheduling",

@@ -96,6 +96,22 @@
               "needs_heat_off_c": "Der Sensor schaltet aus, sobald der Raum höchstens noch so viel unter seinem Ziel liegt. 0 heißt: sobald der Raum sein Ziel erreicht hat. Muss kleiner sein als der Einschaltwert."
             }
           },
+          "auto_boost": {
+            "name": "Automatischer Boost",
+            "description": "Startet von selbst einen Boost, solange der Raum weit unter dem Ziel von Komfort oder der manuellen Temperatur liegt, und beendet ihn, sobald der Raum aufgeholt hat. Er läuft höchstens die Boost-Dauer lang. Ein offenes Fenster, niemand da, Heizung aus oder jede eigene Änderung beendet ihn.",
+            "data": {
+              "auto_boost_enabled": "Automatischer Boost",
+              "auto_boost_start_c": "Starten ab",
+              "auto_boost_stop_c": "Beenden bei",
+              "auto_boost_lockout_min": "Sperrzeit nach einem Boost"
+            },
+            "data_description": {
+              "auto_boost_enabled": "Standardmäßig aus.",
+              "auto_boost_start_c": "Ein Boost startet, sobald der Raum mindestens so viel unter seinem Ziel liegt.",
+              "auto_boost_stop_c": "Der Boost endet, sobald der Raum höchstens noch so viel unter seinem Ziel liegt. 0 heißt: sobald der Raum sein Ziel erreicht hat. Muss kleiner sein als der Startwert.",
+              "auto_boost_lockout_min": "Nach dem Ende eines Boosts startet so lange kein automatischer Boost. So boostet ein Heizkörper, der das Ziel nicht erreicht, nicht immer wieder. 0 = keine Sperrzeit."
+            }
+          },
           "pi_controller": {
             "name": "PI-Regler",
             "description": "Parameter für den Proportional-Integral-Regler.",
@@ -166,6 +182,7 @@
       "backup_sensor_same": "Der Ersatz-Raumsensor muss sich vom externen Temperatursensor unterscheiden.",
       "gain_thresholds": "Adaptive Verstärkung: Die Nahziel-Zonenschwelle muss kleiner sein als die Kaltstart-Zonenschwelle.",
       "needs_heat_thresholds": "Sensor „Braucht Wärme“: Der Ausschaltwert muss kleiner sein als der Einschaltwert.",
+      "auto_boost_thresholds": "Automatischer Boost: Der Endwert muss kleiner sein als der Startwert.",
       "temp_entity_not_found": "Externer Temperatursensor nicht gefunden.",
       "temp_not_temperature": "Bitte einen Temperatursensor (device_class: temperature) auswählen."
     }

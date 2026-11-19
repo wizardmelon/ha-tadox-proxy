@@ -65,6 +65,13 @@ CONF_OVERLAY_REFRESH_S = "overlay_refresh_s"
 CONF_NEEDS_HEAT_ON_C = "needs_heat_on_c"
 CONF_NEEDS_HEAT_OFF_C = "needs_heat_off_c"
 
+# Automatic boost: on/off, start and stop gap below the target of the user
+# choice, and the lockout after a boost.  Its longest run is CONF_BOOST_DURATION.
+CONF_AUTO_BOOST_ENABLED = "auto_boost_enabled"
+CONF_AUTO_BOOST_START_C = "auto_boost_start_c"
+CONF_AUTO_BOOST_STOP_C = "auto_boost_stop_c"
+CONF_AUTO_BOOST_LOCKOUT_MIN = "auto_boost_lockout_min"
+
 # PI controller tuning keys (stored in options)
 CONF_CORRECTION_KP = "correction_kp"
 CONF_CORRECTION_KI = "correction_ki"
@@ -80,10 +87,11 @@ CONF_MIN_CHANGE_THRESHOLD_C = "min_change_threshold_c"
 CONF_INTEGRAL_DEADBAND_C = "integral_deadband_c"
 
 # Options the climate entity applies live via its update listener: those
-# written at runtime by the number/switch entities, and the needs-heat
-# thresholds from the options dialog, which only change what the needs-heat
-# sensor shows.  They must NOT trigger a full integration reload: that would
-# end a running boost, restart or cut short a running delay of the window or
+# written at runtime by the number/switch entities, the needs-heat thresholds
+# from the options dialog, which only change what the needs-heat sensor
+# shows, and the automatic boost options, which PresetLayers takes over
+# live.  They must NOT trigger a full integration reload: that would end a
+# running boost, restart or cut short a running delay of the window or
 # nobody-home layer, and reset the PI integral (a layer that holds the room
 # keeps holding it).  A change to any other option reloads (__init__.py).
 LIVE_OPTION_KEYS = frozenset({
@@ -95,6 +103,10 @@ LIVE_OPTION_KEYS = frozenset({
     CONF_FOLLOW_TADO_INPUT,
     CONF_NEEDS_HEAT_ON_C,
     CONF_NEEDS_HEAT_OFF_C,
+    CONF_AUTO_BOOST_ENABLED,
+    CONF_AUTO_BOOST_START_C,
+    CONF_AUTO_BOOST_STOP_C,
+    CONF_AUTO_BOOST_LOCKOUT_MIN,
 })
 
 # The climate state attributes read back on restart are defined in

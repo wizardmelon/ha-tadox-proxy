@@ -18,6 +18,10 @@ from .climate_controllers import (
     WINDOW_ACTIONS,
 )
 from .const import (
+    CONF_AUTO_BOOST_ENABLED,
+    CONF_AUTO_BOOST_LOCKOUT_MIN,
+    CONF_AUTO_BOOST_START_C,
+    CONF_AUTO_BOOST_STOP_C,
     CONF_BACKUP_TEMPERATURE_ENTITY_ID,
     CONF_BOOST_DURATION,
     CONF_CORRECTION_KI,
@@ -53,6 +57,10 @@ from .const import (
     DOMAIN,
 )
 from .parameters import (
+    DEFAULT_AUTO_BOOST_ENABLED,
+    DEFAULT_AUTO_BOOST_LOCKOUT_MIN,
+    DEFAULT_AUTO_BOOST_START_C,
+    DEFAULT_AUTO_BOOST_STOP_C,
     DEFAULT_MANUAL_MODE_DURATION_MIN,
     DEFAULT_NEEDS_HEAT_OFF_C,
     DEFAULT_NEEDS_HEAT_ON_C,
@@ -147,6 +155,24 @@ def _validate_needs_heat(options: dict) -> dict[str, str]:
     return {}
 
 
+def _validate_auto_boost(options: dict) -> dict[str, str]:
+    """Return form errors for the automatic boost thresholds.
+
+    A boost must start at a larger gap than the one it ends at, otherwise it
+    would end in the cycle after it started.  Checked only while the
+    automatic boost is on: switched off, the thresholds do nothing and must
+    not keep the dialog from saving.  Reported as a base error: the fields
+    sit in a section.
+    """
+    if not options.get(CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED):
+        return {}
+    start_c = options.get(CONF_AUTO_BOOST_START_C, DEFAULT_AUTO_BOOST_START_C)
+    stop_c = options.get(CONF_AUTO_BOOST_STOP_C, DEFAULT_AUTO_BOOST_STOP_C)
+    if start_c <= stop_c:
+        return {"base": "auto_boost_thresholds"}
+    return {}
+
+
 def _validate_gain_thresholds(options: dict) -> dict[str, str]:
     """Return form errors for the gain scheduling thresholds.
 
@@ -196,6 +222,7 @@ class TadoxProxyOptionsFlow(config_entries.OptionsFlow):
                 **_validate_sensor_loss(merged),
                 **_validate_gain_thresholds(merged),
                 **_validate_needs_heat(merged),
+                **_validate_auto_boost(merged),
             }
             if not errors:
                 # A reload, when one is needed, is triggered by the
@@ -397,6 +424,55 @@ class TadoxProxyOptionsFlow(config_entries.OptionsFlow):
                                     min=-1.0, max=1.0, step=0.1,
                                     mode=selector.NumberSelectorMode.BOX,
                                     unit_of_measurement="°C",
+                                )
+                            ),
+                        }
+                    ),
+                    {"collapsed": True},
+                ),
+
+                # Section: Automatic boost (its longest run is the boost duration)
+                vol.Required("auto_boost"): section(
+                    vol.Schema(
+                        {
+                            vol.Required(
+                                CONF_AUTO_BOOST_ENABLED,
+                                default=opts.get(
+                                    CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED
+                                ),
+                            ): selector.BooleanSelector(),
+                            vol.Required(
+                                CONF_AUTO_BOOST_START_C,
+                                default=opts.get(
+                                    CONF_AUTO_BOOST_START_C, DEFAULT_AUTO_BOOST_START_C
+                                ),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0.3, max=3.0, step=0.1,
+                                    mode=selector.NumberSelectorMode.BOX,
+                                    unit_of_measurement="°C",
+                                )
+                            ),
+                            vol.Required(
+                                CONF_AUTO_BOOST_STOP_C,
+                                default=opts.get(CONF_AUTO_BOOST_STOP_C, DEFAULT_AUTO_BOOST_STOP_C),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0.0, max=2.0, step=0.1,
+                                    mode=selector.NumberSelectorMode.BOX,
+                                    unit_of_measurement="°C",
+                                )
+                            ),
+                            vol.Required(
+                                CONF_AUTO_BOOST_LOCKOUT_MIN,
+                                default=opts.get(
+                                    CONF_AUTO_BOOST_LOCKOUT_MIN, DEFAULT_AUTO_BOOST_LOCKOUT_MIN
+                                ),
+                            ): selector.NumberSelector(
+                                selector.NumberSelectorConfig(
+                                    min=0, max=1440, step=1,
+                                    mode=selector.NumberSelectorMode.BOX,
+                                    unit_of_measurement="min",
                                 )
                             ),
                         }

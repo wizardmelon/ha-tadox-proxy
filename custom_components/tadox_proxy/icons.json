@@ -6,6 +6,7 @@
           "window_sensor": "mdi:window-open-variant",
           "presence_sensor": "mdi:motion-sensor",
           "needs_heat": "mdi:water-boiler",
+          "auto_boost": "mdi:rocket-launch-outline",
           "pi_controller": "mdi:chart-bell-curve-cumulative",
           "gain_scheduling": "mdi:tune-vertical",
           "trv_communication": "mdi:radiator",

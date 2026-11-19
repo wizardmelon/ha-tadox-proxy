@@ -581,6 +581,31 @@ class TestDecisionLogicRoutedThroughControllers:
             "_async_switch_trv_for_window",
         )
 
+    def test_regulation_cycle_lets_presetlayers_decide_the_automatic_boost(self):
+        """When an automatic boost starts and ends is PresetLayers' decision
+        (room_reported, tested HA-free); the cycle only reports the room."""
+        assert _method_calls(
+            _CLIMATE_REGULATION_PY, "_async_regulation_cycle_locked", "_report_room_to_layers"
+        )
+        assert _method_calls(_CLIMATE_REGULATION_PY, "_report_room_to_layers", "room_reported")
+
+    def test_the_room_is_reported_before_the_setpoint_is_read(self):
+        """A boost that starts or ends in a cycle must count for that cycle."""
+        body = _regulation_cycle().body
+        reports = [
+            position
+            for position, statement in enumerate(body)
+            if _calls(statement, "_report_room_to_layers")
+        ]
+        setpoints = [
+            position
+            for position, statement in enumerate(body)
+            if _calls(statement, "_effective_setpoint")
+        ]
+        assert len(reports) == 1, "the room is not reported in a direct statement of the cycle"
+        assert setpoints, "no direct statement of the cycle reads the setpoint"
+        assert reports[0] < setpoints[0]
+
     def test_sub_entities_show_the_needs_heat_decision(self):
         """Every write of the sub-entities lets NeedsHeat decide on what the
         climate entity publishes, so the needs-heat sensor cannot fall behind."""
@@ -886,7 +911,8 @@ class TestMigrationKeepsStoredValues:
 
 
 # ---------------------------------------------------------------------------
-# Window/presence/overlay/needs-heat defaults live in parameters.py only (AST)
+# Window/presence/overlay/needs-heat/automatic-boost defaults live in
+# parameters.py only (AST)
 # ---------------------------------------------------------------------------
 
 def _literal_option_defaults(file_path: str, keys: set[str]) -> list[tuple[int, str]]:
@@ -909,7 +935,8 @@ def _literal_option_defaults(file_path: str, keys: set[str]) -> list[tuple[int, 
 
 
 class TestOptionDefaultsCentralised:
-    """Window/presence/overlay/needs-heat defaults come from parameters.py only."""
+    """Window/presence/overlay/needs-heat/automatic-boost defaults come from
+    parameters.py only."""
 
     _KEYS = {
         "CONF_WINDOW_DELAY_S",
@@ -919,6 +946,10 @@ class TestOptionDefaultsCentralised:
         "CONF_OVERLAY_REFRESH_S",
         "CONF_NEEDS_HEAT_ON_C",
         "CONF_NEEDS_HEAT_OFF_C",
+        "CONF_AUTO_BOOST_ENABLED",
+        "CONF_AUTO_BOOST_START_C",
+        "CONF_AUTO_BOOST_STOP_C",
+        "CONF_AUTO_BOOST_LOCKOUT_MIN",
     }
 
     def test_default_values(self):
@@ -929,6 +960,11 @@ class TestOptionDefaultsCentralised:
         assert _params.DEFAULT_OVERLAY_REFRESH_S == 0
         assert _params.DEFAULT_NEEDS_HEAT_ON_C == 0.3
         assert _params.DEFAULT_NEEDS_HEAT_OFF_C == 0.0
+        # Off by default: without it, nothing changes for existing rooms.
+        assert _params.DEFAULT_AUTO_BOOST_ENABLED is False
+        assert _params.DEFAULT_AUTO_BOOST_START_C == 1.0
+        assert _params.DEFAULT_AUTO_BOOST_STOP_C == 0.0
+        assert _params.DEFAULT_AUTO_BOOST_LOCKOUT_MIN == 120
 
     def test_no_literal_defaults_in_climate(self):
         assert _literal_option_defaults(_CLIMATE_PY, self._KEYS) == []

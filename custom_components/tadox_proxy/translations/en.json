@@ -96,6 +96,22 @@
               "needs_heat_off_c": "The sensor turns off once the room is no more than this much below its target. 0 means: when the room has reached its target. Must be lower than the switch-on value."
             }
           },
+          "auto_boost": {
+            "name": "Automatic boost",
+            "description": "Starts a boost by itself while the room is far below the target of your Comfort preset or your manual temperature, and ends it once the room has caught up. It runs at most for the boost duration. An open window, nobody home, turning the heating off or any change you make ends it.",
+            "data": {
+              "auto_boost_enabled": "Automatic boost",
+              "auto_boost_start_c": "Start at",
+              "auto_boost_stop_c": "End at",
+              "auto_boost_lockout_min": "Lockout after a boost"
+            },
+            "data_description": {
+              "auto_boost_enabled": "Off by default.",
+              "auto_boost_start_c": "A boost starts once the room is at least this much below its target.",
+              "auto_boost_stop_c": "The boost ends once the room is no more than this much below its target. 0 means: when the room has reached its target. Must be lower than the start value.",
+              "auto_boost_lockout_min": "After a boost has ended, no automatic boost starts for this long. It keeps a radiator that cannot reach the target from boosting again and again. 0 = no lockout."
+            }
+          },
           "pi_controller": {
             "name": "PI Controller",
             "description": "Proportional-integral controller tuning parameters.",
@@ -166,6 +182,7 @@
       "backup_sensor_same": "The backup room sensor must differ from the external temperature sensor.",
       "gain_thresholds": "Adaptive gain scheduling: the near-target zone threshold must be lower than the cold-start zone threshold.",
       "needs_heat_thresholds": "Needs heat sensor: the switch-off value must be lower than the switch-on value.",
+      "auto_boost_thresholds": "Automatic boost: the end value must be lower than the start value.",
       "temp_entity_not_found": "External temperature sensor not found.",
       "temp_not_temperature": "Please select a temperature sensor (device_class: temperature)."
     }

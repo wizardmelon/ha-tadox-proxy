@@ -42,4 +42,4 @@ def test_translation_has_the_keys_of_strings_json(language):
 def test_options_dialog_errors_are_translated(language):
     """The errors the options dialog can report (config_flow.py)."""
     errors = _load(os.path.join(_TRANSLATIONS_DIR, language))["options"]["error"]
-    assert {"gain_thresholds", "needs_heat_thresholds"} <= errors.keys()
+    assert {"gain_thresholds", "needs_heat_thresholds", "auto_boost_thresholds"} <= errors.keys()
