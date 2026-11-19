@@ -86,6 +86,12 @@
         "state": {
           "on": "mdi:account-group"
         }
+      },
+      "auto_boost": {
+        "default": "mdi:rocket-launch-outline",
+        "state": {
+          "on": "mdi:rocket-launch"
+        }
       }
     }
   }

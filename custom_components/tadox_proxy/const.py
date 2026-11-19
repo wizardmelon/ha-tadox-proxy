@@ -65,8 +65,9 @@ CONF_OVERLAY_REFRESH_S = "overlay_refresh_s"
 CONF_NEEDS_HEAT_ON_C = "needs_heat_on_c"
 CONF_NEEDS_HEAT_OFF_C = "needs_heat_off_c"
 
-# Automatic boost: on/off, start and stop gap below the target of the user
-# choice, and the lockout after a boost.  Its longest run is CONF_BOOST_DURATION.
+# Automatic boost: on/off (written by its switch entity), start and stop gap
+# below the target of the user choice, and the lockout after a boost (options
+# dialog).  Its longest run is CONF_BOOST_DURATION.
 CONF_AUTO_BOOST_ENABLED = "auto_boost_enabled"
 CONF_AUTO_BOOST_START_C = "auto_boost_start_c"
 CONF_AUTO_BOOST_STOP_C = "auto_boost_stop_c"

@@ -18,7 +18,6 @@ from .climate_controllers import (
     WINDOW_ACTIONS,
 )
 from .const import (
-    CONF_AUTO_BOOST_ENABLED,
     CONF_AUTO_BOOST_LOCKOUT_MIN,
     CONF_AUTO_BOOST_START_C,
     CONF_AUTO_BOOST_STOP_C,
@@ -57,7 +56,6 @@ from .const import (
     DOMAIN,
 )
 from .parameters import (
-    DEFAULT_AUTO_BOOST_ENABLED,
     DEFAULT_AUTO_BOOST_LOCKOUT_MIN,
     DEFAULT_AUTO_BOOST_START_C,
     DEFAULT_AUTO_BOOST_STOP_C,
@@ -159,13 +157,10 @@ def _validate_auto_boost(options: dict) -> dict[str, str]:
     """Return form errors for the automatic boost thresholds.
 
     A boost must start at a larger gap than the one it ends at, otherwise it
-    would end in the cycle after it started.  Checked only while the
-    automatic boost is on: switched off, the thresholds do nothing and must
-    not keep the dialog from saving.  Reported as a base error: the fields
-    sit in a section.
+    would end in the cycle after it started.  Checked whether or not the
+    automatic boost is on: its switch sits outside the dialog and can turn it
+    on later.  Reported as a base error: the fields sit in a section.
     """
-    if not options.get(CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED):
-        return {}
     start_c = options.get(CONF_AUTO_BOOST_START_C, DEFAULT_AUTO_BOOST_START_C)
     stop_c = options.get(CONF_AUTO_BOOST_STOP_C, DEFAULT_AUTO_BOOST_STOP_C)
     if start_c <= stop_c:
@@ -207,7 +202,8 @@ class TadoxProxyOptionsFlow(config_entries.OptionsFlow):
             # Strip empty optional sensor values so they're stored as absent
             cleaned = {k: v for k, v in flat.items() if v not in (None, "")}
             # Preserve existing options not shown in this form (e.g. preset
-            # temperatures set via Number entities, follow_tado_input flag).
+            # temperatures set via Number entities, the follow_tado_input and
+            # auto_boost_enabled flags of the switches).
             merged = dict(self.config_entry.options)
             # Remove optional sensor keys that were cleared by the user
             for key in (
@@ -431,16 +427,11 @@ class TadoxProxyOptionsFlow(config_entries.OptionsFlow):
                     {"collapsed": True},
                 ),
 
-                # Section: Automatic boost (its longest run is the boost duration)
+                # Section: Automatic boost.  Switched on and off by its switch
+                # entity; its longest run is the boost duration.
                 vol.Required("auto_boost"): section(
                     vol.Schema(
                         {
-                            vol.Required(
-                                CONF_AUTO_BOOST_ENABLED,
-                                default=opts.get(
-                                    CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED
-                                ),
-                            ): selector.BooleanSelector(),
                             vol.Required(
                                 CONF_AUTO_BOOST_START_C,
                                 default=opts.get(

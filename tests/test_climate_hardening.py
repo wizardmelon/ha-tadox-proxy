@@ -419,6 +419,7 @@ _CLIMATE_REGULATION_PY = os.path.join(_COMP_DIR, "climate_regulation.py")
 _CONFIG_FLOW_PY = os.path.join(_COMP_DIR, "config_flow.py")
 _CONST_PY = os.path.join(_COMP_DIR, "const.py")
 _INIT_PY = os.path.join(_COMP_DIR, "__init__.py")
+_SWITCH_PY = os.path.join(_COMP_DIR, "switch.py")
 
 
 def _method_calls(file_path: str, method_name: str, called: str) -> bool:
@@ -605,6 +606,17 @@ class TestDecisionLogicRoutedThroughControllers:
         assert len(reports) == 1, "the room is not reported in a direct statement of the cycle"
         assert setpoints, "no direct statement of the cycle reads the setpoint"
         assert reports[0] < setpoints[0]
+
+    def test_the_auto_boost_switch_is_the_only_control_of_its_option(self):
+        """One source of truth: the switch writes auto_boost_enabled, the
+        options dialog keeps only the thresholds and the lockout."""
+        with open(_CONFIG_FLOW_PY, encoding="utf-8") as fh:
+            config_flow = fh.read()
+        with open(_SWITCH_PY, encoding="utf-8") as fh:
+            switch = fh.read()
+        assert "CONF_AUTO_BOOST_ENABLED" not in config_flow
+        assert switch.count("CONF_AUTO_BOOST_ENABLED: True") == 1
+        assert switch.count("CONF_AUTO_BOOST_ENABLED: False") == 1
 
     def test_sub_entities_show_the_needs_heat_decision(self):
         """Every write of the sub-entities lets NeedsHeat decide on what the

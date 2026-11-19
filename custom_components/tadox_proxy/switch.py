@@ -8,8 +8,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import CONF_FOLLOW_TADO_INPUT, DOMAIN
+from .const import CONF_AUTO_BOOST_ENABLED, CONF_FOLLOW_TADO_INPUT, DOMAIN
 from .device import proxy_device_info
+from .parameters import DEFAULT_AUTO_BOOST_ENABLED
 
 
 async def async_setup_entry(
@@ -21,7 +22,9 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]
     guest_mode = GuestModeSwitch(coordinator, entry)
     coordinator.guest_mode_switch_entity = guest_mode
-    async_add_entities([FollowTadoInputSwitch(coordinator, entry), guest_mode])
+    async_add_entities(
+        [FollowTadoInputSwitch(coordinator, entry), guest_mode, AutoBoostSwitch(coordinator, entry)]
+    )
 
 
 class FollowTadoInputSwitch(CoordinatorEntity, SwitchEntity):
@@ -111,3 +114,45 @@ class GuestModeSwitch(CoordinatorEntity, SwitchEntity):
             return
         # The climate entity writes this switch's state via its linked entities.
         await climate.async_set_guest_mode(enabled)
+
+
+class AutoBoostSwitch(CoordinatorEntity, SwitchEntity):
+    """Switch that lets the room start and end a boost by itself.
+
+    When on, the room starts a boost while it is far below the target of the
+    user choice and ends it once it has caught up (see PresetLayers).  The
+    thresholds and the lockout stay in the options dialog.  Like the
+    follow-Tado switch, its state is the option ``auto_boost_enabled`` – the
+    one place it is stored, applied live by the climate entity.
+    """
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "auto_boost"
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        """Initialize the automatic boost switch."""
+        super().__init__(coordinator)
+        self._entry = entry
+        self._attr_unique_id = f"{entry.entry_id}_auto_boost"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info so this entity appears on the same device."""
+        return proxy_device_info(self._entry)
+
+    @property
+    def is_on(self) -> bool:
+        """Return True if the automatic boost is enabled."""
+        return self._entry.options.get(CONF_AUTO_BOOST_ENABLED, DEFAULT_AUTO_BOOST_ENABLED)
+
+    async def async_turn_on(self, **kwargs) -> None:
+        """Enable the automatic boost."""
+        new_opts = {**self._entry.options, CONF_AUTO_BOOST_ENABLED: True}
+        self.hass.config_entries.async_update_entry(self._entry, options=new_opts)
+        self.async_write_ha_state()
+
+    async def async_turn_off(self, **kwargs) -> None:
+        """Disable the automatic boost; a running automatic boost ends."""
+        new_opts = {**self._entry.options, CONF_AUTO_BOOST_ENABLED: False}
+        self.hass.config_entries.async_update_entry(self._entry, options=new_opts)
+        self.async_write_ha_state()

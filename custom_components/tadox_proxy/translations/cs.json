@@ -98,15 +98,13 @@
           },
           "auto_boost": {
             "name": "Automatický boost",
-            "description": "Sám spustí boost, dokud je teplota v místnosti výrazně pod cílem předvolby Komfort nebo vaší ruční teploty, a ukončí jej, jakmile místnost cíl dožene. Trvá nejvýše po dobu boostu. Ukončí jej otevřené okno, nepřítomnost, vypnutí topení nebo jakákoli vaše změna.",
+            "description": "Sám spustí boost, dokud je teplota v místnosti výrazně pod cílem předvolby Komfort nebo vaší ruční teploty, a ukončí jej, jakmile místnost cíl dožene. Zapíná se přepínačem „Automatický boost“ tohoto zařízení. Trvá nejvýše po dobu boostu. Ukončí jej otevřené okno, nepřítomnost, vypnutí topení nebo jakákoli vaše změna.",
             "data": {
-              "auto_boost_enabled": "Automatický boost",
               "auto_boost_start_c": "Spustit při odchylce od",
               "auto_boost_stop_c": "Ukončit při odchylce do",
               "auto_boost_lockout_min": "Blokování po boostu"
             },
             "data_description": {
-              "auto_boost_enabled": "Ve výchozím stavu vypnuto.",
               "auto_boost_start_c": "Boost se spustí, jakmile je teplota v místnosti alespoň o tuto hodnotu pod cílem.",
               "auto_boost_stop_c": "Boost skončí, jakmile teplota v místnosti není o více než tuto hodnotu pod cílem. Hodnota 0 znamená přesné dosažení cílové teploty. Musí být nižší než hodnota pro spuštění.",
               "auto_boost_lockout_min": "Po skončení boostu se po tuto dobu žádný automatický boost nespustí. Radiátor, který cíle nedosáhne, tak neboostuje stále dokola. 0 = bez blokování."
@@ -288,6 +286,9 @@
       },
       "guest_mode": {
         "name": "Režim hosta"
+      },
+      "auto_boost": {
+        "name": "Automatický boost"
       }
     }
   }

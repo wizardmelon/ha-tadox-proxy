@@ -98,15 +98,13 @@
           },
           "auto_boost": {
             "name": "Automatic boost",
-            "description": "Starts a boost by itself while the room is far below the target of your Comfort preset or your manual temperature, and ends it once the room has caught up. It runs at most for the boost duration. An open window, nobody home, turning the heating off or any change you make ends it.",
+            "description": "Starts a boost by itself while the room is far below the target of your Comfort preset or your manual temperature, and ends it once the room has caught up. Switch it on with the Auto boost switch of this device. It runs at most for the boost duration. An open window, nobody home, turning the heating off or any change you make ends it.",
             "data": {
-              "auto_boost_enabled": "Automatic boost",
               "auto_boost_start_c": "Start at",
               "auto_boost_stop_c": "End at",
               "auto_boost_lockout_min": "Lockout after a boost"
             },
             "data_description": {
-              "auto_boost_enabled": "Off by default.",
               "auto_boost_start_c": "A boost starts once the room is at least this much below its target.",
               "auto_boost_stop_c": "The boost ends once the room is no more than this much below its target. 0 means: when the room has reached its target. Must be lower than the start value.",
               "auto_boost_lockout_min": "After a boost has ended, no automatic boost starts for this long. It keeps a radiator that cannot reach the target from boosting again and again. 0 = no lockout."
@@ -288,6 +286,9 @@
       },
       "guest_mode": {
         "name": "Guest mode"
+      },
+      "auto_boost": {
+        "name": "Auto boost"
       }
     }
   }

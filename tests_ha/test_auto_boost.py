@@ -3,14 +3,15 @@ choice, ends once it has caught up, and waits for the send limit.
 
 When it starts and ends is PresetLayers' decision (tests/test_preset_layers.py);
 these tests check the wiring: the regulation cycle reports the room sensor's
-own reading, the options apply live, and the dialog checks the thresholds.
+own reading, the switch and the options apply live, and the dialog checks the
+thresholds.
 """
 from __future__ import annotations
 
 from unittest.mock import patch
 
 from homeassistant.components.climate import PRESET_BOOST, PRESET_COMFORT, PRESET_ECO
-from homeassistant.const import STATE_UNAVAILABLE
+from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.data_entry_flow import FlowResultType
 
 from .helpers import (
@@ -24,6 +25,8 @@ from .helpers import (
     async_submit_options,
 )
 
+# The option the switch writes; set directly here for rooms that start with
+# the automatic boost on.
 AUTO_BOOST = {"auto_boost_enabled": True, "auto_boost_lockout_min": 60}
 
 
@@ -40,11 +43,55 @@ def _setpoints(proxy: Proxy) -> list[float]:
     return [c["temperature"] for c in proxy.trv_commands("set_temperature")]
 
 
+def _switch(proxy: Proxy) -> str:
+    return proxy.entity_id("switch", "auto_boost")
+
+
 async def test_off_by_default_and_shows_nothing(hass, freezer):
+    """Also what an entry saved by v1.6.1 gets: it has no auto_boost_enabled."""
     proxy = await async_setup_proxy(hass, trv_adopts=True)
+    assert "auto_boost_enabled" not in proxy.entry.options
 
     await _async_room_reads(proxy, freezer, 17.0)
 
+    assert hass.states.get(_switch(proxy)).state == STATE_OFF
+    assert proxy.preset == PRESET_COMFORT
+    assert "auto_boost_active" not in proxy.state.attributes
+
+
+async def test_switch_is_named_after_the_proxy(hass):
+    proxy = await async_setup_proxy(hass)
+
+    assert _switch(proxy) == "switch.living_auto_boost"
+    state = hass.states.get(_switch(proxy))
+    assert state is not None
+    assert state.attributes["friendly_name"] == "Living Auto boost"
+
+
+async def test_switch_shows_the_stored_option(hass):
+    proxy = await async_setup_proxy(hass, options=AUTO_BOOST)
+
+    assert hass.states.get(_switch(proxy)).state == STATE_ON
+
+
+async def test_switch_applies_live_and_off_ends_a_running_boost(hass, freezer):
+    proxy = await async_setup_proxy(hass, trv_adopts=True)
+    await async_advance(hass, freezer, CONTROL_INTERVAL_S)
+
+    with patch.object(hass.config_entries, "async_reload") as reload:
+        await proxy.call("switch", "turn_on", _switch(proxy))
+        await _async_room_reads(proxy, freezer, 19.0)
+
+        assert proxy.entry.options["auto_boost_enabled"] is True
+        assert hass.states.get(_switch(proxy)).state == STATE_ON
+        assert proxy.preset == PRESET_BOOST
+        assert proxy.state.attributes["auto_boost_active"] is True
+
+        await proxy.call("switch", "turn_off", _switch(proxy))
+
+    reload.assert_not_called()
+    assert proxy.entry.options["auto_boost_enabled"] is False
+    assert hass.states.get(_switch(proxy)).state == STATE_OFF
     assert proxy.preset == PRESET_COMFORT
     assert "auto_boost_active" not in proxy.state.attributes
 
@@ -118,7 +165,7 @@ async def test_a_preset_picked_by_hand_ends_it(hass, freezer):
 
 
 async def test_options_apply_live_without_a_reload(hass, freezer):
-    proxy = await async_setup_proxy(hass, trv_adopts=True)
+    proxy = await async_setup_proxy(hass, options=AUTO_BOOST, trv_adopts=True)
     # The first save adds every option the dialog shows; let that reload pass.
     result = await async_submit_options(hass, proxy.entry)
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -126,48 +173,46 @@ async def test_options_apply_live_without_a_reload(hass, freezer):
 
     with patch.object(hass.config_entries, "async_reload") as reload:
         result = await async_submit_options(
-            hass, proxy.entry, auto_boost={"auto_boost_enabled": True}
+            hass, proxy.entry, auto_boost={"auto_boost_start_c": 0.5}
         )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     reload.assert_not_called()
+    assert proxy.entry.options["auto_boost_start_c"] == 0.5
+    # Saving the dialog keeps what the switch stored.
+    assert proxy.entry.options["auto_boost_enabled"] is True
     # A reload would have ended the boost.
     assert proxy.preset == PRESET_BOOST
     assert proxy.state.attributes["auto_boost_active"] is False
 
 
 async def test_dialog_requires_the_start_gap_above_the_end_gap(hass):
+    """Also while the switch is off: it can be turned on without the dialog."""
     proxy = await async_setup_proxy(hass)
 
     result = await async_submit_options(
         hass,
         proxy.entry,
-        auto_boost={
-            "auto_boost_enabled": True,
-            "auto_boost_start_c": 0.5,
-            "auto_boost_stop_c": 0.5,
-        },
+        auto_boost={"auto_boost_start_c": 0.5, "auto_boost_stop_c": 0.5},
     )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "auto_boost_thresholds"}
 
-    # Switched off, the thresholds do nothing and do not block the dialog.
     result = await async_submit_options(
         hass,
         proxy.entry,
-        auto_boost={
-            "auto_boost_enabled": False,
-            "auto_boost_start_c": 0.5,
-            "auto_boost_stop_c": 0.5,
-        },
+        auto_boost={"auto_boost_start_c": 0.6, "auto_boost_stop_c": 0.5},
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
-async def test_options_are_in_their_collapsed_section(hass):
+async def test_options_are_in_their_collapsed_section_without_the_switch(hass):
     proxy = await async_setup_proxy(hass)
     result = await hass.config_entries.options.async_init(proxy.entry.entry_id)
-    names = {str(key) for key in result["data_schema"].schema}
+    schema = result["data_schema"].schema
+    names = {str(key) for key in schema}
+    section = next(value for key, value in schema.items() if str(key) == "auto_boost")
+    fields = {str(key) for key in section.schema.schema}
 
-    assert "auto_boost" in names
-    assert "auto_boost_enabled" not in names
+    assert "auto_boost_start_c" not in names
+    assert fields == {"auto_boost_start_c", "auto_boost_stop_c", "auto_boost_lockout_min"}
