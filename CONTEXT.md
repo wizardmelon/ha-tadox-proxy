@@ -37,7 +37,7 @@ The layer a person starts for a short burst of heat. Its time only runs while th
 _Avoid_: boost mode, boost preset
 
 **Automatic boost**:
-A boost the room starts by itself while it is clearly below the target of the user choice (Comfort or Manual), and ends once the room has caught up. Unlike a person's boost it never pauses: whatever would pause a boost ends it. A person picking Boost turns it into their own.
+A boost the room starts by itself while it is clearly below the target of the user choice (Comfort or Manual), and ends once the room has caught up. Unlike a person's boost it never pauses: whatever would pause a boost ends it. Only a change to the user choice ends it; a command that repeats the choice does not. A person picking Boost turns it into their own.
 _Avoid_: auto mode, smart boost
 
 **Boost lockout**:

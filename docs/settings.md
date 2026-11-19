@@ -152,10 +152,18 @@ radiator with lukewarm water has little more heat to give.
 - **It never pauses.** A boost you start yourself pauses behind an open window, nobody
   home or heating that is off. An automatic boost ends instead. It does not come back
   afterwards; a new one starts only after the lockout below, if the room is still cold.
-- **Anything you do ends it:** picking a preset, setting a temperature, turning the
-  dial on the radiator (with [following the physical thermostat](#following-the-physical-thermostat)
-  on) or turning the heating off. Picking Boost turns it into a boost of your own with
-  its full time.
+- **Any change to your choice ends it:** picking another preset, setting another
+  temperature, turning the dial on the radiator (with
+  [following the physical thermostat](#following-the-physical-thermostat) on) or
+  turning the heating off. Picking Boost turns it into a boost of your own with its
+  full time.
+- **A command that repeats your choice does not end it.** Picking the preset that
+  already is your choice, or setting the Manual temperature you already have, leaves
+  it running and starts no lockout. So an automation that sends the same target again
+  – for example each time someone comes home – does not cut it short. Setting the
+  temperature still restarts the [Manual timer](#presets). Setting your Comfort
+  temperature by hand is a change, though: your choice becomes Manual. A boost you
+  start yourself still ends on any of these commands.
 - **It only trusts your room sensor.** It does not start while
   `binary_sensor.<name>_sensor_degraded` is on, and it ends if the sensor drops out.
   It does not start while a window is open or its close delay runs, or while the
