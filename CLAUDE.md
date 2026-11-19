@@ -43,7 +43,7 @@ prüfen lässt, per AST-Guard absichern (siehe `tests/test_climate_hardening.py`
 - `number.py` – NumberEntity für Preset-Temperaturen
 - `sensor.py` – Boost-Restzeit-Sensor
 - `binary_sensor.py` – Sensor-Degraded-Diagnose und Sensor „Braucht Wärme“ (zeigt nur die Entscheidung der Climate-Entity)
-- `switch.py` – Toggle-Features (z.B. Follow Tado Input)
+- `switch.py` – Toggle-Features (z.B. Follow Tado Input, Auto-Boost: beide schreiben ihre Option, der Optionsdialog zeigt sie nicht)
 - `config_flow.py` – Setup + Options Flow
 - `diagnostics.py` – HA-Diagnostics-Export
 - `const.py` – DOMAIN, Config-Keys, Custom Preset Names

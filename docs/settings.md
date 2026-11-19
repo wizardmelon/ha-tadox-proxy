@@ -130,11 +130,13 @@ The attribute `user_preset` on the climate entity shows your choice at any time.
 
 ### Automatic boost
 
-**Off by default.** Switch it on under **Settings → Devices & Services → Tado X
-Proxy → Configure → Automatic boost**.
+`switch.<name>_auto_boost` ("Auto-Boost" in German), **off by default**. Put it on a
+dashboard, or switch it from an automation, for example only in winter. The values it
+works with are under **Settings → Devices & Services → Tado X Proxy → Configure →
+Automatic boost**.
 
-The room then starts a boost by itself while it is clearly below its target, and ends
-it once the room has caught up. This helps a room that has to warm up a lot, for
+With the switch on, the room starts a boost by itself while it is clearly below its
+target, and ends it once the room has caught up. This helps a room that has to warm up a lot, for
 example when a schedule switches from Eco to Comfort in the morning. How much it helps
 depends on the water behind the radiator: a boost asks the valve to open wide, but a
 radiator with lukewarm water has little more heat to give.
@@ -168,14 +170,13 @@ radiator with lukewarm water has little more heat to give.
 
 | Setting | Default | Range | What it does |
 |---|---|---|---|
-| Automatic boost | Off | On/Off | Master switch for this section |
 | Start at | 1.0 °C | 0.3–3.0 °C | A boost starts once the room is at least this much below its target |
 | End at | 0.0 °C | 0.0–2.0 °C | The boost ends once the room is no more than this much below its target. Must be lower than **Start at** |
 | Lockout after a boost | 120 min | 0–1440 min | No automatic boost for this long after a boost has ended. 0 means no lockout |
 
 How long it may run is the **Boost duration** at the top of the dialog. Changes
-apply right away and do not interrupt a running boost. Switching it off ends a
-running automatic boost.
+apply right away and do not interrupt a running boost. Turning the switch off ends a
+running automatic boost. The switch keeps its state across Home Assistant restarts.
 
 The attribute `auto_boost_active` on the climate entity tells an automatic boost from
 one you started. `sensor.<name>_boost_remaining` counts down for both.
@@ -207,6 +208,7 @@ Each entry creates:
 | `binary_sensor.<name>_needs_heat` | On while the room needs heat. For a boiler that only runs on demand, see [needs heat for a boiler](#needs-heat-for-a-boiler) |
 | `switch.<name>_follow_physical_thermostat` | Off by default, see [below](#following-the-physical-thermostat) |
 | `switch.<name>_guest_mode` | Off by default, see [guest mode](#guest-mode) |
+| `switch.<name>_auto_boost` | Off by default, see [automatic boost](#automatic-boost) |
 
 The `sensor_degraded` entity is worth putting on a dashboard or wiring to a
 notification — a dead room sensor is the one failure that quietly ruins the
@@ -636,7 +638,7 @@ something is wrong or when you are curious what the integration is thinking.
 | `window_trv_off` | The window action switched the TRV off, and it has not heated since. True while the window holds the room, including the close delay; gone once the TRV is switched on again |
 | `presence_away_active` | Nobody home holds the room. Also while the heating is off |
 | `guest_mode` | Guest mode is on, presence detection will not switch to Away |
-| `auto_boost_active` | The running boost was started by the [automatic boost](#automatic-boost). Only while the automatic boost is switched on |
+| `auto_boost_active` | The running boost was started by the [automatic boost](#automatic-boost). Only while its switch is on |
 | `auto_boost_lockout_until_ts` | Until when no automatic boost starts, as a Unix timestamp. Only while that lockout runs |
 | `sensor_degraded` | Room sensor missing, running on the last reading |
 | `active_control_mode` | What controls the TRV right now: `room_sensor`, `backup_sensor`, `trv` or `hold`. See [when the sensor drops out](#when-the-sensor-drops-out) |
