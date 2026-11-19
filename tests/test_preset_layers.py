@@ -968,6 +968,380 @@ class TestBoostStartedByAPerson:
 
 
 # ---------------------------------------------------------------------------
+# Automatic boost
+# ---------------------------------------------------------------------------
+
+LOCKOUT_S = 3600
+
+
+def _auto_room(**changes) -> PresetLayers:
+    """A room on Comfort (20 °C) with the automatic boost on: it starts 1 K
+    below the target, ends at the target, and none follows for 60 min after
+    a boost."""
+    return _room(**{"auto_boost_enabled": True, "auto_boost_lockout_min": 60, **changes})
+
+
+def _auto_boosted(room: PresetLayers, now: float) -> PresetLayers:
+    """The room reports 18.5 °C at *now*: an automatic boost runs."""
+    room.room_reported(18.5, now)
+    assert room.auto_boost_active
+    return room
+
+
+class TestAutomaticBoost:
+
+    def test_starts_once_the_room_is_the_start_gap_below_the_target(self):
+        room = _auto_room()
+
+        effects = room.room_reported(19.1, T0)
+        assert room.active_preset == COMFORT
+        assert effects.timers == {}
+
+        effects = room.room_reported(19.0, T0 + 60)
+
+        assert room.active_preset == BOOST_PRESET
+        assert room.room_target_c == 25.0
+        assert room.auto_boost_active
+        assert room.user_choice.preset == COMFORT
+        assert effects.timers == {BOOST: 1800}
+        assert effects.changed
+        # The cycle that reported the room already runs on the boost target.
+        assert effects.cycle is None
+        assert room.attributes()["auto_boost_active"] is True
+
+    def test_a_gap_of_exactly_the_start_value_starts_it(self):
+        """20.0 - 18.8 is 1.1999... in binary floats."""
+        room = _auto_room(auto_boost_start_c=1.2)
+
+        room.room_reported(18.8, T0)
+
+        assert room.auto_boost_active
+
+    def test_is_not_the_boost_a_person_starts(self):
+        """Only a person's boost may skip the send limit."""
+        room = _auto_room()
+
+        effects = room.room_reported(18.0, T0)
+
+        assert effects.cycle != BOOST_STARTED
+        assert not room.is_boost_start(effects.cycle)
+
+    def test_ends_once_the_room_has_reached_the_target_of_the_user_choice(self):
+        """The gap counts against Comfort, not against the boost target."""
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.room_reported(19.9, T0 + 600)
+        assert room.active_preset == BOOST_PRESET
+
+        effects = room.room_reported(20.0, T0 + 1200)
+
+        assert room.active_preset == COMFORT
+        assert not room.auto_boost_active
+        assert effects.timers == {BOOST: None}
+        assert room.attributes()["auto_boost_active"] is False
+        assert room.attributes()["auto_boost_lockout_until_ts"] == T0 + 1200 + LOCKOUT_S
+
+    def test_a_stop_value_above_zero_ends_it_below_the_target(self):
+        room = _auto_boosted(_auto_room(auto_boost_stop_c=0.3), T0)
+
+        room.room_reported(19.6, T0 + 600)
+        assert room.active_preset == BOOST_PRESET
+
+        room.room_reported(19.7, T0 + 1200)
+        assert room.active_preset == COMFORT
+
+    def test_heats_towards_a_manual_temperature(self):
+        room = _auto_room()
+        room.set_temperature(22.0, T0)
+
+        room.room_reported(21.1, T0 + 60)
+        assert room.active_preset == MANUAL
+
+        room.room_reported(21.0, T0 + 120)
+        assert room.active_preset == BOOST_PRESET
+
+        room.room_reported(22.0, T0 + 1000)
+        assert room.active_preset == MANUAL
+        assert room.room_target_c == 22.0
+
+    def test_never_starts_for_a_user_choice_that_saves_energy(self):
+        for preset in (ECO, AWAY_PRESET, FROST):
+            room = _auto_room()
+            room.pick_preset(preset, T0)
+
+            room.room_reported(5.0, T0 + 60)
+
+            assert room.active_preset == preset, preset
+            assert not room.auto_boost_active
+
+    def test_runs_at_most_the_boost_duration(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        effects = room.timer_elapsed(BOOST, T0 + 1800)
+
+        assert room.active_preset == COMFORT
+        assert effects.cycle == "boost_expired"
+        assert room.attributes()["auto_boost_lockout_until_ts"] == T0 + 1800 + LOCKOUT_S
+
+    def test_a_radiator_that_cannot_reach_the_target_does_not_boost_in_a_loop(self):
+        room = _auto_boosted(_auto_room(), T0)
+        room.timer_elapsed(BOOST, T0 + 1800)
+
+        room.room_reported(18.5, T0 + 1860)
+        room.room_reported(18.5, T0 + 1800 + LOCKOUT_S - 1)
+        assert room.active_preset == COMFORT
+
+        room.room_reported(18.5, T0 + 1800 + LOCKOUT_S)
+        assert room.active_preset == BOOST_PRESET
+        assert room.auto_boost_active
+        # A new lockout only starts once this boost has ended.
+        assert "auto_boost_lockout_until_ts" not in room.attributes()
+
+    def test_the_lockout_attribute_goes_with_the_first_report_after_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+        room.room_reported(20.0, T0 + 600)
+
+        effects = room.room_reported(20.0, T0 + 600 + LOCKOUT_S)
+
+        assert "auto_boost_lockout_until_ts" not in room.attributes()
+        assert effects.changed
+        assert effects.cycle is None
+
+    def test_no_lockout_set_to_zero_lets_the_next_one_start_at_once(self):
+        room = _auto_boosted(_auto_room(auto_boost_lockout_min=0), T0)
+        room.timer_elapsed(BOOST, T0 + 1800)
+        assert "auto_boost_lockout_until_ts" not in room.attributes()
+
+        room.room_reported(18.5, T0 + 1860)
+
+        assert room.auto_boost_active
+
+    def test_the_end_of_a_persons_boost_starts_the_lockout_too(self):
+        """Otherwise a boost that ran its time would go on as an automatic one."""
+        room = _auto_room()
+        room.pick_preset(BOOST_PRESET, T0)
+        assert not room.auto_boost_active
+        room.timer_elapsed(BOOST, T0 + 1800)
+
+        room.room_reported(18.5, T0 + 1860)
+
+        assert room.active_preset == COMFORT
+
+    def test_a_persons_boost_is_not_ended_by_the_room_reaching_the_target(self):
+        room = _auto_room()
+        room.pick_preset(BOOST_PRESET, T0)
+
+        room.room_reported(21.0, T0 + 60)
+        room.room_reported(None, T0 + 120)
+
+        assert room.active_preset == BOOST_PRESET
+
+    def test_picking_a_preset_ends_it_and_none_starts_right_after(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        effects = room.pick_preset(COMFORT, T0 + 600)
+        assert room.active_preset == COMFORT
+        assert effects.timers == {BOOST: None}
+
+        room.room_reported(18.5, T0 + 660)
+        assert room.active_preset == COMFORT
+
+    def test_a_preset_command_without_a_person_ends_it_too(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.pick_preset(ECO, T0 + 600, by_person=False)
+
+        assert room.active_preset == ECO
+
+    def test_setting_a_temperature_ends_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.set_temperature(21.0, T0 + 600)
+        room.room_reported(18.5, T0 + 660)
+
+        assert room.active_preset == MANUAL
+        assert not room.auto_boost_active
+
+    def test_turning_the_dial_ends_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.valve_changed(21.0, T0 + 600)
+
+        assert room.active_preset == MANUAL
+
+    def test_picking_boost_makes_it_a_persons_boost_with_its_full_time(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        effects = room.pick_preset(BOOST_PRESET, T0 + 600)
+        assert effects.timers == {BOOST: 1800}
+        assert not room.auto_boost_active
+
+        room.room_reported(20.5, T0 + 660)
+        assert room.active_preset == BOOST_PRESET
+
+    def test_an_open_window_ends_it_instead_of_pausing_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.window_reported(ON, T0 + 600)
+        assert room.active_preset == BOOST_PRESET
+        effects = room.timer_elapsed(WINDOW_OPEN, T0 + 630)
+        assert room.active_preset == FROST
+        assert effects.timers == {BOOST: None}
+
+        _close_window(room, T0 + 1000)
+
+        assert room.active_preset == COMFORT
+        assert room.attributes()["auto_boost_lockout_until_ts"] == T0 + 630 + LOCKOUT_S
+
+    def test_does_not_start_while_a_window_is_open_or_its_close_delay_runs(self):
+        room = _auto_room()
+
+        room.window_reported(ON, T0)
+        room.room_reported(18.0, T0 + 10)
+        assert room.active_preset == COMFORT
+
+        room.timer_elapsed(WINDOW_OPEN, T0 + 30)
+        room.window_reported(OFF, T0 + 600)
+        room.room_reported(18.0, T0 + 660)
+        assert room.active_preset == FROST
+
+        room.timer_elapsed(WINDOW_CLOSE, T0 + 720)
+        room.room_reported(18.0, T0 + 780)
+        assert room.active_preset == BOOST_PRESET
+
+    def test_nobody_home_ends_it_instead_of_pausing_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        _leave(room, T0 + 60)
+        assert room.active_preset == AWAY_PRESET
+
+        _come_home(room, T0 + 2000)
+        assert room.active_preset == COMFORT
+
+    def test_does_not_start_while_the_away_delay_runs(self):
+        room = _auto_room()
+
+        room.presence_reported(OFF, T0)
+        room.room_reported(18.0, T0 + 60)
+
+        assert room.active_preset == COMFORT
+
+    def test_starts_in_guest_mode_although_nobody_is_home(self):
+        room = _auto_room()
+        room.set_guest_mode(True, T0)
+        room.presence_reported(OFF, T0)
+
+        room.room_reported(18.0, T0 + 60)
+
+        assert room.active_preset == BOOST_PRESET
+
+    def test_turning_the_heating_off_ends_it_and_none_starts_while_off(self):
+        room = _auto_boosted(_auto_room(auto_boost_lockout_min=0), T0)
+
+        effects = room.heating_off(T0 + 600)
+        assert room.active_preset == COMFORT
+        assert effects.timers == {BOOST: None}
+
+        room.room_reported(18.0, T0 + 660)
+        assert room.active_preset == COMFORT
+
+        room.heating_on(T0 + 1000)
+        room.room_reported(18.0, T0 + 1060)
+        assert room.active_preset == BOOST_PRESET
+
+    def test_does_not_start_without_a_trusted_room_reading(self):
+        room = _auto_room()
+
+        effects = room.room_reported(None, T0)
+
+        assert room.active_preset == COMFORT
+        assert not effects.changed
+
+    def test_a_lost_room_reading_ends_it(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.room_reported(None, T0 + 600)
+
+        assert room.active_preset == COMFORT
+        assert not room.auto_boost_active
+
+    def test_switched_off_it_does_nothing_and_shows_nothing(self):
+        room = _room()
+
+        effects = room.room_reported(10.0, T0)
+        room.pick_preset(BOOST_PRESET, T0 + 60)
+        room.timer_elapsed(BOOST, T0 + 1860)
+        room.room_reported(10.0, T0 + 1900)
+
+        assert room.active_preset == COMFORT
+        assert effects == _layers.Effects()
+        assert not {"auto_boost_active", "auto_boost_lockout_until_ts"} & room.attributes().keys()
+
+    def test_switching_it_off_ends_a_running_one_and_its_lockout(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        effects = room.options_changed(_config(auto_boost_enabled=False), T0 + 600)
+
+        assert room.active_preset == COMFORT
+        assert effects.timers == {BOOST: None}
+        assert not {"auto_boost_active", "auto_boost_lockout_until_ts"} & room.attributes().keys()
+
+        room.options_changed(_config(auto_boost_enabled=True), T0 + 700)
+        room.room_reported(18.5, T0 + 760)
+        assert room.auto_boost_active
+
+    def test_new_thresholds_apply_to_the_next_report(self):
+        room = _auto_room()
+        room.room_reported(19.5, T0)
+        assert room.active_preset == COMFORT
+
+        room.options_changed(
+            _config(auto_boost_enabled=True, auto_boost_start_c=0.5), T0 + 30
+        )
+        room.room_reported(19.5, T0 + 60)
+
+        assert room.active_preset == BOOST_PRESET
+
+    def test_the_lockout_survives_a_restart_but_the_boost_does_not(self):
+        before = _auto_boosted(_auto_room(), T0)
+        before.room_reported(20.0, T0 + 600)
+
+        after = _auto_room()
+        after.start(
+            StartSnapshot.from_state(
+                "heat", _written_state(before), window_state=OFF, presence_state=ON
+            ),
+            T0 + 900,
+        )
+        after.room_reported(18.0, T0 + 960)
+
+        assert after.active_preset == COMFORT
+        assert after.attributes()["auto_boost_lockout_until_ts"] == T0 + 600 + LOCKOUT_S
+
+    def test_a_running_boost_does_not_survive_a_restart(self):
+        before = _auto_boosted(_auto_room(), T0)
+
+        after = _auto_room()
+        after.start(
+            StartSnapshot.from_state(
+                "heat", _written_state(before), window_state=OFF, presence_state=ON
+            ),
+            T0 + 60,
+        )
+
+        assert after.active_preset == COMFORT
+        assert not after.auto_boost_active
+
+    def test_a_lockout_that_ended_while_ha_was_down_is_gone(self):
+        after = _auto_room()
+        after.start(StartSnapshot(auto_boost_lockout_until_ts=T0 - 1), T0)
+
+        after.room_reported(18.5, T0 + 60)
+
+        assert after.auto_boost_active
+
+
+# ---------------------------------------------------------------------------
 # Heating off and on
 # ---------------------------------------------------------------------------
 

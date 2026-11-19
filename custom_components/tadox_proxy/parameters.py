@@ -54,6 +54,16 @@ DEFAULT_OVERLAY_REFRESH_S: int = 0
 DEFAULT_NEEDS_HEAT_ON_C: float = 0.3
 DEFAULT_NEEDS_HEAT_OFF_C: float = 0.0
 
+# Automatic boost, overridable via options; off unless switched on.  It
+# starts once the room is at least the first value below the target of the
+# user choice and ends once it is no more than the second value below it
+# (°C).  After a boost has ended, none starts by itself for the lockout
+# (min): a radiator that cannot reach the target must not boost in a loop.
+DEFAULT_AUTO_BOOST_ENABLED: bool = False
+DEFAULT_AUTO_BOOST_START_C: float = 1.0
+DEFAULT_AUTO_BOOST_STOP_C: float = 0.0
+DEFAULT_AUTO_BOOST_LOCKOUT_MIN: int = 120
+
 
 # ---------------------------------------------------------------------------
 # Correction tuning  (PI layer on top of feedforward)

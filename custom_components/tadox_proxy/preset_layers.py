@@ -7,8 +7,10 @@ over nobody home over boost over the user choice.  The **active preset** is
 always derived from these; no layer writes into the user choice.  A boost only
 counts down while it heats the room; paused by heating that is off it still
 shows as the active preset – it is what holds the room once the heating is
-back on.  The **manual timer** is no layer: when it ends, it writes the return
-preset into the user choice.
+back on.  An **automatic boost** is a boost the room starts by itself while it
+is far below the target of the user choice; it ends once the room has caught
+up, and whatever would pause a boost ends it.  The **manual timer** is no
+layer: when it ends, it writes the return preset into the user choice.
 
 The module never schedules anything: every event returns ``Effects`` with the
 timers to start or cancel, which the caller reports back as elapsed.  This
@@ -35,7 +37,14 @@ from .climate_controllers import (
     preset_target_c,
     safe_float,
 )
-from .parameters import DEFAULT_MANUAL_MODE_DURATION_MIN, PresetConfig
+from .parameters import (
+    DEFAULT_AUTO_BOOST_ENABLED,
+    DEFAULT_AUTO_BOOST_LOCKOUT_MIN,
+    DEFAULT_AUTO_BOOST_START_C,
+    DEFAULT_AUTO_BOOST_STOP_C,
+    DEFAULT_MANUAL_MODE_DURATION_MIN,
+    PresetConfig,
+)
 
 # Timer ids.  The caller schedules them and reports them back as elapsed.
 TIMER_WINDOW_OPEN = "window_open"
@@ -61,6 +70,10 @@ ATTR_WINDOW_CLOSE_DELAY_ACTIVE = "window_close_delay_active"
 ATTR_PRESENCE_AWAY_ACTIVE = "presence_away_active"
 ATTR_GUEST_MODE = "guest_mode"
 ATTR_WINDOW_TRV_OFF = "window_trv_off"
+# Only while the automatic boost is switched on: the running boost started by
+# itself, and until when none may start (only while that lockout runs).
+ATTR_AUTO_BOOST_ACTIVE = "auto_boost_active"
+ATTR_AUTO_BOOST_LOCKOUT_UNTIL_TS = "auto_boost_lockout_until_ts"
 # Only in the extra restore data, which survives when HA hides the attributes
 # of an unavailable entity: the HVAC mode the room is meant to run.
 ATTR_DESIRED_HVAC_MODE = "desired_hvac_mode"
@@ -80,6 +93,9 @@ _OFF = "off"
 # Named presets a user choice can hold; Manual carries a temperature, a
 # boost is a layer.
 _CHOOSABLE = (PRESET_COMFORT, PRESET_ECO, PRESET_AWAY, PRESET_FROST_PROTECTION)
+# User choices an automatic boost may heat towards.  Eco, Away and Frost
+# Protection are picked to save energy; boosting towards them makes no sense.
+_AUTO_BOOST_CHOICES = (PRESET_COMFORT, PRESET_NONE)
 
 
 @dataclass(frozen=True)
@@ -101,6 +117,13 @@ class LayersConfig:
     has_presence_sensor: bool
     manual_mode_action: str = DEFAULT_MANUAL_MODE_ACTION
     manual_mode_duration_min: int = DEFAULT_MANUAL_MODE_DURATION_MIN
+    # Automatic boost: starts at a gap of at least auto_boost_start_c below
+    # the target of the user choice, ends at auto_boost_stop_c or less; after
+    # a boost, none starts by itself for auto_boost_lockout_min.
+    auto_boost_enabled: bool = DEFAULT_AUTO_BOOST_ENABLED
+    auto_boost_start_c: float = DEFAULT_AUTO_BOOST_START_C
+    auto_boost_stop_c: float = DEFAULT_AUTO_BOOST_STOP_C
+    auto_boost_lockout_min: int = DEFAULT_AUTO_BOOST_LOCKOUT_MIN
 
 
 @dataclass(frozen=True)
@@ -139,6 +162,7 @@ class StartSnapshot:
     guest_mode: bool = False
     window_state: str | None = None
     presence_state: str | None = None
+    auto_boost_lockout_until_ts: float | None = None
     # Only in states written by v1.4.x and older: what an open window kept
     # to restore, and the shown target (before manual_target_c existed).
     window_kept_preset: str | None = None
@@ -182,6 +206,9 @@ class StartSnapshot:
             guest_mode=attributes.get(ATTR_GUEST_MODE) is True,
             window_state=window_state,
             presence_state=presence_state,
+            auto_boost_lockout_until_ts=safe_float(
+                attributes.get(ATTR_AUTO_BOOST_LOCKOUT_UNTIL_TS)
+            ),
             window_kept_preset=attributes.get(ATTR_V14_WINDOW_RESTORE_PRESET),
             window_kept_c=safe_float(attributes.get(ATTR_V14_WINDOW_RESTORE_TARGET)),
             target_c=safe_float(attributes.get(_HA_ATTR_TEMPERATURE)),
@@ -219,9 +246,12 @@ class PresetLayers:
         self._valve_off_by_window = False
         self._valve_off_failed = False
         # Boost time left (None: no boost) and since when it runs (None:
-        # paused).
+        # paused); whether the room started it by itself, and until when no
+        # automatic boost may start (None: no lockout).
         self._boost_left_s: float | None = None
         self._boost_since: float | None = None
+        self._boost_automatic = False
+        self._auto_boost_lockout_until_ts: float | None = None
         # The manual timer: the return preset and when it ends (None: not
         # running).
         self._manual_return_preset: str | None = None
@@ -337,6 +367,36 @@ class PresetLayers:
             self._start_away_delay()
         return self._effects("guest_mode")
 
+    def room_reported(self, temp_c: float | None, now: float) -> Effects:
+        """The room temperature of this regulation cycle, *temp_c*.
+
+        None while it is not the room sensor's own fresh reading: the sensor
+        is missing (also while its last reading bridges the gap), the backup
+        sensor or the valve is in charge, or the valve reports no reading.
+
+        Starts an automatic boost once the room is far enough below the
+        target of the user choice, and ends one once the room has caught up
+        or the reading is gone.  The cycle that reports it already runs on
+        the new target, so no further cycle is asked for.
+        """
+        self._begin(now)
+        if (
+            self._auto_boost_lockout_until_ts is not None
+            and now >= self._auto_boost_lockout_until_ts
+        ):
+            self._auto_boost_lockout_until_ts = None
+        gap_c = None if temp_c is None else self._target_c(self._user.preset) - temp_c
+        if self._boost_automatic:
+            if gap_c is None or _at_most(gap_c, self._config.auto_boost_stop_c):
+                self._end_boost()
+        elif (
+            gap_c is not None
+            and self._auto_boost_may_start()
+            and _at_least(gap_c, self._config.auto_boost_start_c)
+        ):
+            self._start_boost(automatic=True)
+        return self._effects(None)
+
     def options_changed(self, config: LayersConfig, now: float) -> Effects:
         """The options changed, e.g. a preset target from its number entity.
 
@@ -347,13 +407,17 @@ class PresetLayers:
         self._config = config
         if config.manual_mode_action == MANUAL_MODE_KEEP:
             self._cancel_manual_return()
+        if not config.auto_boost_enabled:
+            if self._boost_automatic:
+                self._end_boost()
+            self._auto_boost_lockout_until_ts = None
         return self._effects("options_changed")
 
     def heating_off(self, now: float) -> Effects:
         """The valve confirmed that the heating is off.
 
-        Only a boost pauses; window and presence detection keep following
-        their sensors.
+        Only a boost pauses (an automatic one ends); window and presence
+        detection keep following their sensors.
         """
         self._begin(now)
         self._heating = False
@@ -400,9 +464,10 @@ class PresetLayers:
     def start(self, snapshot: StartSnapshot, now: float) -> Effects:
         """Start after a restart or reload from *snapshot*.
 
-        The user choice survives; a boost does not.  A layer that held the
-        room before goes on without a new delay while its sensor does not
-        say otherwise – a sensor that has not reported yet is no news.
+        The user choice survives; a boost does not, but the lockout after
+        one does.  A layer that held the room before goes on without a new
+        delay while its sensor does not say otherwise – a sensor that has not
+        reported yet is no news.
         """
         self._begin(now)
         self._heating = snapshot.heating_on
@@ -410,6 +475,14 @@ class PresetLayers:
         self._window_state = snapshot.window_state
         self._presence_state = snapshot.presence_state
         self._valve_off_by_window = snapshot.valve_off_by_window
+        if (
+            self._config.auto_boost_enabled
+            and snapshot.auto_boost_lockout_until_ts is not None
+            and snapshot.auto_boost_lockout_until_ts > now
+        ):
+            # The lockout outlasts a restart: a radiator that could not reach
+            # the target before it cannot after it either.
+            self._auto_boost_lockout_until_ts = snapshot.auto_boost_lockout_until_ts
         if snapshot.user_preset is None:
             self._user, window_held, nobody_home_held = self._upgrade_from_v14(snapshot)
         else:
@@ -493,6 +566,11 @@ class PresetLayers:
         """Guest mode keeps nobody home from holding the room."""
         return self._guest_mode
 
+    @property
+    def auto_boost_active(self) -> bool:
+        """The running boost is one the room started by itself."""
+        return self._boost_automatic
+
     def attributes(self) -> dict[str, object]:
         """State attributes to show and to persist for a restart."""
         attrs: dict[str, object] = {
@@ -509,6 +587,10 @@ class PresetLayers:
             attrs[ATTR_MANUAL_RETURN_AT_TS] = self._manual_return_at_ts
         if self._valve_off_by_window:
             attrs[ATTR_WINDOW_TRV_OFF] = True
+        if self._config.auto_boost_enabled:
+            attrs[ATTR_AUTO_BOOST_ACTIVE] = self._boost_automatic
+            if self._auto_boost_lockout_until_ts is not None:
+                attrs[ATTR_AUTO_BOOST_LOCKOUT_UNTIL_TS] = self._auto_boost_lockout_until_ts
         return attrs
 
     def boost_remaining_min(self, now: float) -> int:
@@ -555,17 +637,21 @@ class PresetLayers:
     @property
     def room_target_c(self) -> float:
         """The room target of the active preset."""
+        return self._target_c(self.active_preset)
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _target_c(self, preset: str) -> float:
+        """The room target of *preset*."""
         return preset_target_c(
-            self.active_preset,
+            preset,
             self._config.presets,
             comfort_c=self._config.comfort_c,
             # Manual is only active as a user choice, which carries it.
             manual_c=self._user.manual_c if self._user.manual_c is not None else 0.0,
         )
-
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
 
     def _arm(self, timer_id: str, delay_s: float) -> None:
         self._armed.add(timer_id)
@@ -694,26 +780,59 @@ class PresetLayers:
         self._manual_return_preset = None
         self._manual_return_at_ts = None
 
-    def _start_boost(self) -> None:
-        """Start the boost with its full time (also when one is running)."""
+    def _start_boost(self, *, automatic: bool = False) -> None:
+        """Start the boost with its full time (also when one is running).
+
+        A boost picked during an automatic one is no longer automatic.
+        """
         self._disarm(TIMER_BOOST)
         self._boost_left_s = self._config.presets.boost_duration_min * 60
         self._boost_since = None
+        self._boost_automatic = automatic
 
     def _end_boost(self) -> None:
+        if self._boost_left_s is not None and self._config.auto_boost_enabled:
+            # Whatever ended it – its time, the room reaching the target, a
+            # person, a layer – no automatic boost follows right away.
+            lockout_s = self._config.auto_boost_lockout_min * 60
+            self._auto_boost_lockout_until_ts = self._now + lockout_s if lockout_s > 0 else None
         self._disarm(TIMER_BOOST)
         self._boost_left_s = None
         self._boost_since = None
+        self._boost_automatic = False
+
+    def _auto_boost_may_start(self) -> bool:
+        """An automatic boost may start now, if the room is cold enough.
+
+        Not while a boost runs or the lockout after one, not for a user
+        choice that saves energy, and not while a layer holds the room or is
+        about to: an open window (including its open and close delay), nobody
+        home (including the away delay) or heating that is off.
+        """
+        return (
+            self._config.auto_boost_enabled
+            and self._boost_left_s is None
+            and self._auto_boost_lockout_until_ts is None
+            and self._user.preset in _AUTO_BOOST_CHOICES
+            and self._boost_may_run()
+            and TIMER_WINDOW_OPEN not in self._armed
+            and TIMER_AWAY not in self._armed
+        )
 
     def _boost_may_run(self) -> bool:
         """A boost would be what heats the room right now."""
         return self._heating and not self._window_holds and not self._nobody_home_holds
 
     def _settle_boost(self) -> None:
-        """Run the boost while it is what heats the room, else pause it."""
+        """Run the boost while it is what heats the room, else pause it –
+        or end it, if the room started it by itself."""
         if self._boost_left_s is None:
             return
         runs = self._boost_may_run()
+        if not runs and self._boost_automatic:
+            # An automatic boost does not wait: whatever would pause it ends it.
+            self._end_boost()
+            return
         if runs and self._boost_since is None:
             self._boost_since = self._now
             self._arm(TIMER_BOOST, self._boost_left_s)
@@ -768,6 +887,20 @@ def _user_choice(preset: str | None, manual_c: float | None) -> UserChoice:
     if preset == PRESET_NONE and manual_c is not None:
         return UserChoice(PRESET_NONE, manual_c)
     return UserChoice(PRESET_COMFORT)
+
+
+def _at_least(value_c: float, threshold_c: float) -> bool:
+    """True if *value_c* is at least *threshold_c*, compared in hundredths.
+
+    Temperatures come in tenths; binary floats would put a gap of exactly the
+    threshold (target 20.0, room 18.8: 1.1999...) a hair below it.
+    """
+    return round(value_c - threshold_c, 2) >= 0
+
+
+def _at_most(value_c: float, threshold_c: float) -> bool:
+    """True if *value_c* is no more than *threshold_c*, compared in hundredths."""
+    return round(value_c - threshold_c, 2) <= 0
 
 
 def _is_transition(previous: str | None, state: str | None) -> bool:
