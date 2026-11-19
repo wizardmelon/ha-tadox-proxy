@@ -1136,14 +1136,114 @@ class TestAutomaticBoost:
 
         assert room.active_preset == BOOST_PRESET
 
-    def test_picking_a_preset_ends_it_and_none_starts_right_after(self):
+    def test_picking_another_preset_ends_it_and_none_starts_right_after(self):
         room = _auto_boosted(_auto_room(), T0)
 
-        effects = room.pick_preset(COMFORT, T0 + 600)
-        assert room.active_preset == COMFORT
+        effects = room.pick_preset(ECO, T0 + 600)
+        assert room.active_preset == ECO
         assert effects.timers == {BOOST: None}
 
+        room.pick_preset(COMFORT, T0 + 630)
         room.room_reported(18.5, T0 + 660)
+        assert room.active_preset == COMFORT
+
+    # A command that leaves the user choice as it is ends no automatic boost
+    # and starts no lockout: an automation re-sending its target (field case:
+    # a presence automation re-applying the Manual temperature) must not cut
+    # the boost short.
+
+    def test_picking_the_preset_that_already_is_the_choice_keeps_it_running(self):
+        room = _auto_boosted(_auto_room(), T0)
+
+        for by_person in (True, False):
+            effects = room.pick_preset(COMFORT, T0 + 600, by_person=by_person)
+
+            assert room.active_preset == BOOST_PRESET
+            assert room.auto_boost_active
+            assert effects.timers == {}
+            assert not effects.changed
+            assert "auto_boost_lockout_until_ts" not in room.attributes()
+        assert room.boost_remaining_min(T0 + 600) == 20
+
+    def test_setting_the_manual_temperature_it_already_has_keeps_it_running(self):
+        room = _auto_room()
+        room.set_temperature(20.6, T0)
+        _auto_boosted(room, T0 + 60)
+
+        effects = room.set_temperature(20.6, T0 + 130)
+
+        assert room.active_preset == BOOST_PRESET
+        assert room.auto_boost_active
+        assert effects.timers == {}
+        assert "auto_boost_lockout_until_ts" not in room.attributes()
+        assert room.user_choice == _layers.UserChoice(MANUAL, 20.6)
+
+        room.room_reported(20.6, T0 + 1000)
+        assert room.active_preset == MANUAL
+
+    def test_the_same_temperature_after_the_limits_counts_as_a_repeat(self):
+        room = _auto_room(max_target_c=22.0)
+        room.set_temperature(22.0, T0)
+        _auto_boosted(room, T0 + 60)
+
+        room.set_temperature(23.0, T0 + 120)
+
+        assert room.auto_boost_active
+
+    def test_a_repeated_temperature_still_restarts_the_manual_timer(self):
+        """Only the boost is spared; the timer does what any temperature does."""
+        room = _auto_room(manual_mode_action="timer", manual_mode_duration_min=60)
+        room.pick_preset(COMFORT, T0 - 10)
+        room.set_temperature(21.0, T0)
+        _auto_boosted(room, T0 + 60)
+
+        effects = room.set_temperature(21.0, T0 + 600)
+
+        assert room.auto_boost_active
+        assert effects.timers == {MANUAL_RETURN: 3600}
+        assert room.attributes()["manual_return_at_ts"] == T0 + 600 + 3600
+
+    def test_another_temperature_ends_it(self):
+        room = _auto_room()
+        room.set_temperature(20.6, T0)
+        _auto_boosted(room, T0 + 60)
+
+        room.set_temperature(20.5, T0 + 120)
+
+        assert room.active_preset == MANUAL
+        assert room.attributes()["auto_boost_lockout_until_ts"] == T0 + 120 + LOCKOUT_S
+
+    def test_the_comfort_temperature_set_by_hand_ends_it(self):
+        """Comfort to Manual changes the user choice, even at the same target."""
+        room = _auto_boosted(_auto_room(), T0)
+
+        room.set_temperature(20.0, T0 + 60)
+
+        assert room.active_preset == MANUAL
+        assert not room.auto_boost_active
+
+    def test_the_dial_turned_to_the_manual_temperature_ends_it(self):
+        """During a boost the valve holds the boost setpoint: any dial turn is real."""
+        room = _auto_room()
+        room.set_temperature(20.6, T0)
+        _auto_boosted(room, T0 + 60)
+
+        room.valve_changed(20.6, T0 + 120)
+
+        assert room.active_preset == MANUAL
+        assert not room.auto_boost_active
+
+    def test_a_persons_boost_still_ends_on_a_repeated_choice(self):
+        """Unchanged for a boost a person started."""
+        room = _auto_room()
+        room.set_temperature(20.6, T0)
+        room.pick_preset(BOOST_PRESET, T0 + 60)
+        room.set_temperature(20.6, T0 + 120)
+        assert room.active_preset == MANUAL
+
+        room.pick_preset(COMFORT, T0 + 180)
+        room.pick_preset(BOOST_PRESET, T0 + 240)
+        room.pick_preset(COMFORT, T0 + 300)
         assert room.active_preset == COMFORT
 
     def test_a_preset_command_without_a_person_ends_it_too(self):

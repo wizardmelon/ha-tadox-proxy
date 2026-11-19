@@ -164,6 +164,42 @@ async def test_a_preset_picked_by_hand_ends_it(hass, freezer):
     assert proxy.state.attributes["auto_boost_active"] is False
 
 
+async def test_an_automation_re_sending_the_same_target_does_not_end_it(hass, freezer):
+    """Field case: a presence automation re-applies the Manual temperature the
+    room already has while an automatic boost runs.  The boost keeps running
+    and no lockout starts; so does the same HVAC mode sent again."""
+    proxy = await async_setup_proxy(hass, options=AUTO_BOOST, trv_adopts=True)
+    await proxy.call("climate", "set_temperature", proxy.climate, temperature=20.6)
+    await _async_room_reads(proxy, freezer, 19.5)
+    assert proxy.preset == PRESET_BOOST
+
+    await proxy.call("climate", "set_temperature", proxy.climate, temperature=20.6)
+    await proxy.call("climate", "set_hvac_mode", proxy.climate, hvac_mode="heat")
+    await async_advance(hass, freezer, CONTROL_INTERVAL_S)
+
+    assert proxy.preset == PRESET_BOOST
+    assert proxy.state.attributes["auto_boost_active"] is True
+    assert "auto_boost_lockout_until_ts" not in proxy.state.attributes
+    assert proxy.state.attributes["manual_target_c"] == 20.6
+
+    # A different temperature is a real change: the boost ends.
+    await proxy.call("climate", "set_temperature", proxy.climate, temperature=20.5)
+    assert proxy.preset == "none"
+    assert "auto_boost_lockout_until_ts" in proxy.state.attributes
+
+
+async def test_the_preset_that_already_is_the_choice_does_not_end_it(hass, freezer):
+    proxy = await async_setup_proxy(hass, options=AUTO_BOOST, trv_adopts=True)
+    await _async_room_reads(proxy, freezer, 19.0)
+    assert proxy.preset == PRESET_BOOST
+
+    await proxy.call("climate", "set_preset_mode", proxy.climate, preset_mode=PRESET_COMFORT)
+
+    assert proxy.preset == PRESET_BOOST
+    assert proxy.state.attributes["auto_boost_active"] is True
+    assert "auto_boost_lockout_until_ts" not in proxy.state.attributes
+
+
 async def test_options_apply_live_without_a_reload(hass, freezer):
     proxy = await async_setup_proxy(hass, options=AUTO_BOOST, trv_adopts=True)
     # The first save adds every option the dialog shows; let that reload pass.

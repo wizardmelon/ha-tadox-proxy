@@ -281,6 +281,9 @@ class PresetLayers:
         automation) only changes the return preset: Manual runs its full time,
         and neither a close delay nor a boost ends.  A boost it starts is no
         user choice and goes the normal way.
+
+        Picking the preset that already is the user choice leaves an
+        automatic boost running: nothing it heats towards has changed.
         """
         self._begin(now)
         if preset not in (*_CHOOSABLE, PRESET_BOOST):
@@ -297,15 +300,22 @@ class PresetLayers:
             # later, and that is nobody's tap.
             started = by_person and self._boost_may_run()
             return self._effects(CYCLE_BOOST_STARTED if started else "preset_change")
-        self._end_boost()
+        if not (self._boost_automatic and self._user == UserChoice(preset)):
+            self._end_boost()
         if not self._layer_forces(preset):
             self._cancel_manual_return()
             self._user = UserChoice(preset)
         return self._effects("preset_change")
 
     def set_temperature(self, temp_c: float, now: float) -> Effects:
-        """A person set *temp_c*: Manual with that temperature."""
-        return self._set_manual(temp_c, now, "set_temperature")
+        """A person set *temp_c*: Manual with that temperature.
+
+        Setting the Manual temperature the user choice already has leaves an
+        automatic boost running – an automation that re-sends its target
+        must not cut the boost short.  Everything else stays as for any
+        temperature: the manual timer starts again.
+        """
+        return self._set_manual(temp_c, now, "set_temperature", repeat_keeps_auto_boost=True)
 
     def valve_changed(self, temp_c: float, now: float) -> Effects:
         """A person turned the dial on the valve to *temp_c*.
@@ -662,10 +672,26 @@ class PresetLayers:
             self._armed.discard(timer_id)
             self._timer_ops[timer_id] = None
 
-    def _set_manual(self, temp_c: float, now: float, trigger: str) -> Effects:
+    def _set_manual(
+        self, temp_c: float, now: float, trigger: str, *, repeat_keeps_auto_boost: bool = False
+    ) -> Effects:
+        """Manual with *temp_c* becomes the user choice.
+
+        *repeat_keeps_auto_boost*: a temperature equal to the Manual one the
+        user choice already has leaves an automatic boost running.  Not for
+        the dial: during a boost the valve holds the boost setpoint, so a
+        dial turned to any value is a real move.
+        """
         self._begin(now)
         self._change_by_person()
-        self._end_boost()
+        limited = max(self._config.min_target_c, min(self._config.max_target_c, temp_c))
+        repeat = (
+            self._user.preset == PRESET_NONE
+            and self._user.manual_c is not None
+            and round(self._user.manual_c - limited, 2) == 0
+        )
+        if not (repeat_keeps_auto_boost and repeat and self._boost_automatic):
+            self._end_boost()
         return_preset = self._manual_return_preset or self._user.preset
         if self._config.manual_mode_action == MANUAL_MODE_TIMER and return_preset in _CHOOSABLE:
             delay_s = self._config.manual_mode_duration_min * 60
@@ -674,7 +700,6 @@ class PresetLayers:
             self._arm(TIMER_MANUAL_RETURN, delay_s)
         else:
             self._cancel_manual_return()
-        limited = max(self._config.min_target_c, min(self._config.max_target_c, temp_c))
         self._user = UserChoice(PRESET_NONE, limited)
         return self._effects(trigger)
 
